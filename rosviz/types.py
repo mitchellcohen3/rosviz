@@ -20,14 +20,18 @@ from geometry_msgs.msg import TransformStamped
 
 from rosviz.utils import to_quat
 
+
 class OdometryViz:
     def __init__(
         self,
-        pub_name="odometry_state",
-        tf_pub_name="/tf",
-        queue_size=50,
+        pub_name: str = "odometry_state",
+        tf_pub_name: str = "/tf",
+        queue_size: int = 50,
         frame_id="world",
-        child_frame_id="map",
+        child_frame_id: str = "map",
+        enable_path_viz: bool = False,
+        max_poses_in_path: int = None,
+        path_viz_pub_name: str = "path_viz",
     ):
         self.frame_id = frame_id
         self.child_frame_id = child_frame_id
@@ -40,6 +44,13 @@ class OdometryViz:
         # Create publishers
         self.pub = rospy.Publisher(pub_name, Odometry, queue_size=queue_size)
         self.tf_pub = rospy.Publisher("/tf", TFMessage, queue_size=1)
+        self.enable_path_viz = enable_path_viz
+
+        if self.enable_path_viz:
+            self.path_viz = PathViz(
+                pub_name=path_viz_pub_name,
+                max_poses=max_poses_in_path,
+            )
 
     def update(self, attitude: np.ndarray, position: np.ndarray):
         """Updates the Odometry and publishes it over ROS.
@@ -80,10 +91,14 @@ class OdometryViz:
         transform.transform.rotation.x = quat[1]
         transform.transform.rotation.y = quat[2]
         transform.transform.rotation.z = quat[3]
-        
+
         tf_msg = TFMessage()
         tf_msg.transforms = [transform]
         self.tf_pub.publish(tf_msg)
+
+        # Update path visualization if enabled
+        if self.enable_path_viz:
+            self.path_viz.update(attitude=attitude, position=position)
 
 
 class EllipsoidViz:
@@ -316,37 +331,47 @@ class BoundingBox3DViz:
 
 
 class PathViz:
-    def __init__(self, pub_name):
-        """Instantiate a PathViz object"""
+    def __init__(self, pub_name: str, max_poses: int = None):
+        """Instantiate a PathViz object.
+
+        This creates a publisher for a ROS Path message, which can be used to visualize
+        paths in 3D space.
+
+        Parameters
+        ----------
+        pub_name : str
+            Name of the publisher for the path.
+        max_poses : int, optional
+            Maximum number of poses to store in the path, by default None.
+            If None, the path can grow indefinitely.
+        """
+
         self.path = Path()
         self.path.header.frame_id = "world"
 
         # Create a path publisher
         self.pub = rospy.Publisher(pub_name, Path, queue_size=10)
+        self.max_poses = max_poses
 
-    def update(self, **kwargs):
-        """Updates the path object
+    def update(self, attitude: np.ndarray, position: np.ndarray):
+        """Updates the path object.
 
         Parameters
         ----------
-        orientation : np.ndarray
-            _description_
+        attitude : np.ndarray
+            Orientation of the robot, represented as a 3x3 direction cosine matrix (DCM)
         position : np.ndarray
-            _description_
-        pub : rospy.Publisher
-            _description_
+            Position of the robot, represented as a 3x1 vector in the inertial frame
         """
 
-        orientation = kwargs["orientation"]
-        position = kwargs["position"]
-
+        # Create an odometry message and set the pose
         odom = Odometry()
         odom.header.frame_id = "world"
         odom.child_frame_id = "map"
 
         # Set the pose and twist
         x, y, z = position.flatten()
-        quat = utils.dcm_to_quaternion(orientation)
+        quat = to_quat(attitude, order="xyzw")
 
         odom.pose.pose = Pose(
             Point(x, y, z),
@@ -364,6 +389,10 @@ class PathViz:
 
         # Add message to path
         self.path.poses.append(pose_stamped)
+
+        if self.max_poses is not None:
+            if len(self.path.poses) > self.max_poses:
+                self.path.poses.pop(0)
 
         # Publish path
         self.pub.publish(self.path)

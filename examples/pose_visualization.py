@@ -5,15 +5,15 @@ from rosviz.utils import Exp_SO3
 
 def main(n_timestamps):
     # Create an odometry visualization object
-    odometry_viz = OdometryViz()
+    odometry_viz = OdometryViz(enable_path_viz=False)
 
     # Update the odometry visualization with new poses
     position = np.array([0.0, 0.0, 0.0])
     attitude = Exp_SO3(np.array([0.0, 0.0, 0.0]))
 
     for i in range(n_timestamps):
-        position += np.array([0.01, 0.01, 0.0])
-        attitude = attitude @ Exp_SO3(np.array([0.0, 0.0, 0.01]))
+        position += np.array([0.01, 0.01, 0.01 * np.sin(i * 0.01)])
+        attitude = attitude @ Exp_SO3(np.array([0.001, 0.001, 0.01]))
         odometry_viz.update(attitude, position)
         rospy.sleep(0.01)
     
