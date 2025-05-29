@@ -1,11 +1,11 @@
 # ROSViz Visualization Library
 A Python package for visualizing basic primitives in RViz. Currently, the following basic visualizations are implemented.
-    - Poses (odometry),
-    - Ellipsoids,
-    - Bounding boxes,
-    - Camera poses,
-    - Point clouds, 
-    - Lines
+- Poses (odometry),
+- Ellipsoids,
+- Bounding boxes,
+- Camera poses,
+- Point clouds, 
+- Lines
 
 ## Requirements
  - Python 3.6 or higher

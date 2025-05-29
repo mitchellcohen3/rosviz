@@ -568,13 +568,13 @@ class CameraViz:
 
 
 class PointCloudViz:
-    def __init__(self, pub_name):
+    def __init__(self, pub_name: str = "point_cloud"):
         self.pub = rospy.Publisher(pub_name, PointCloud, queue_size=50)
 
         self.point_cloud = PointCloud()
         self.point_cloud.header.frame_id = "world"
 
-    def update(self, **kwargs):
+    def update(self, positions:typing.List[np.ndarray]):
         """Updates the point cloud.
 
         Parameters
@@ -583,17 +583,14 @@ class PointCloudViz:
             List of point positions, resolved in the inertial frame.
         """
 
-        positions = kwargs["position"]
-
         if not isinstance(positions, list):
             positions = [positions]
 
+        # Update the positions
         self.point_cloud.points.clear()
         for pos in positions:
             x, y, z = pos.flatten()
-            r_pw_a = Point(x, y, z)
-            self.point_cloud.points.append(r_pw_a)
-
+            self.point_cloud.points.append(Point(x, y, z))
         self.pub.publish(self.point_cloud)
 
 
