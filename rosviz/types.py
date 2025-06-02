@@ -13,11 +13,10 @@ from geometry_msgs.msg import (
 )
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import ColorRGBA
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 from sensor_msgs.msg import PointCloud
 from tf2_msgs.msg import TFMessage
-from geometry_msgs.msg import TransformStamped
-
+from geometry_msgs.msg import TransformStamped, Point, Vector3
 from rosviz.utils import to_quat
 
 
@@ -593,6 +592,75 @@ class PointCloudViz:
             self.point_cloud.points.append(Point(x, y, z))
         self.pub.publish(self.point_cloud)
 
+
+class PointCloudVelocityViz:
+    def __init__(self, point_topic: str = "point_cloud", arrow_topic: str = "velocity_arrows"):
+        self.point_pub = rospy.Publisher(point_topic, PointCloud, queue_size=50)
+        self.arrow_pub = rospy.Publisher(arrow_topic, MarkerArray, queue_size=10)
+
+        self.frame_id = "world"
+
+        # Template for point cloud
+        self.point_cloud = PointCloud()
+        self.point_cloud.header.frame_id = self.frame_id
+
+    def update(self,
+               positions: typing.List[np.ndarray],
+               velocities: typing.List[np.ndarray]):
+        """
+        Updates the point cloud and velocity arrow markers.
+
+        Parameters
+        ----------
+        positions : List[np.ndarray]
+            List of point positions (3D) in world frame.
+
+        velocities : List[np.ndarray]
+            Corresponding list of velocity vectors (3D) in world frame.
+        """
+        if not isinstance(positions, list):
+            positions = [positions]
+        if not isinstance(velocities, list):
+            velocities = [velocities]
+
+        assert len(positions) == len(velocities), "positions and velocities must be the same length"
+
+        # Update point cloud
+        self.point_cloud.points.clear()
+        for pos in positions:
+            x, y, z = pos.flatten()
+            self.point_cloud.points.append(Point(x, y, z))
+        self.point_cloud.header.stamp = rospy.Time.now()
+        self.point_pub.publish(self.point_cloud)
+
+        # Update velocity arrows
+        marker_array = MarkerArray()
+        for i, (pos, vel) in enumerate(zip(positions, velocities)):
+            start = pos.flatten()
+            end = (pos + vel * 2).flatten()
+
+            arrow_marker = Marker()
+            arrow_marker.header.frame_id = self.frame_id
+            arrow_marker.header.stamp = rospy.Time.now()
+            arrow_marker.ns = "velocities"
+            arrow_marker.id = i
+            arrow_marker.type = Marker.ARROW
+            arrow_marker.action = Marker.ADD
+            arrow_marker.scale = Vector3(0.05, 0.2, 0.2)  # shaft diameter, head diameter, head length
+
+            arrow_marker.color.r = 0.5
+            arrow_marker.color.g = 0
+            arrow_marker.color.b = 0.5
+            arrow_marker.color.a = 1.0
+
+            arrow_marker.points = [
+                Point(start[0], start[1], start[2]),
+                Point(end[0], end[1], end[2])
+            ]
+
+            marker_array.markers.append(arrow_marker)
+
+        self.arrow_pub.publish(marker_array)
 
 class LineViz:
     def __init__(
