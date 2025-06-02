@@ -94,5 +94,4 @@ def dcm_to_quaternion(C: np.ndarray):
 def numpy_to_point(array: np.ndarray):
     """Converts a 3x1 numpy array to a Point msg."""
     x, y, z = array.flatten()
-
     return Point(x, y, z)

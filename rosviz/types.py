@@ -17,7 +17,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from sensor_msgs.msg import PointCloud
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import TransformStamped, Point, Vector3
-from rosviz.utils import to_quat
+from rosviz.utils import to_quat, numpy_to_point
 
 
 class OdometryViz:
@@ -318,8 +318,8 @@ class BoundingBox3DViz:
             p1 = points[:, 0].reshape((-1, 1))
             p2 = points[:, 1].reshape((-1, 1))
 
-            p1 = utils.numpy_to_point(p1)
-            p2 = utils.numpy_to_point(p2)
+            p1 = numpy_to_point(p1)
+            p2 = numpy_to_point(p2)
 
             self.marker.points.append(p1)
             self.marker.points.append(p2)
@@ -409,31 +409,34 @@ class CameraViz:
 
     def __init__(
         self,
-        r=1.0,
-        g=0.0,
-        b=0.0,
-        a=1.0,
-        scale=0.5,
-        line_width=0.02,
-        pub_name="camera_pose",
-        clear_viz=True,
+        r: float =1.0,
+        g: float =0.0,
+        b: float =0.0,
+        a: float =1.0,
+        scale: float =0.5,
+        line_width: float =0.02,
+        pub_name: str ="camera_pose",
+        clear_viz: bool =True,
+        enable_path_viz: bool =False,
+        path_viz_pub_name: bool ="camera_path",
+        max_poses_in_path: int = None,
     ):
         """Instantiate a CameraViz object
 
         Parameters
         ----------
         r : float, optional
-            _description_, by default 1.0
+            Red color component, by default 1.0
         g : float, optional
-            _description_, by default 0.0
+            Green color component, by default 0.0
         b : float, optional
-            _description_, by default 0.0
+            Blue color component, by default 0.0
         a : float, optional
-            _description_, by default 1.0
+            Alpha (opacity), by default 1.0 
         scale : float, optional
-            _description_, by default 0.5
+            Size of the camera, by default 0.5
         line_width : float, optional
-            _description_, by default 0.02
+            Line width of each component, by default 0.02
         """
         # Set color
         self.color = ColorRGBA()
@@ -480,35 +483,43 @@ class CameraViz:
         self.pub = rospy.Publisher(pub_name, Marker, queue_size=50)
         self.clear_viz = clear_viz
 
-    def update(self, **kwargs):
+        self.enable_path_viz = enable_path_viz
+        if enable_path_viz:
+            self.path_viz = PathViz(
+                pub_name=path_viz_pub_name,
+                max_poses=max_poses_in_path,
+            )
+    
+
+    def update(self, attitude: np.ndarray, position: np.ndarray):
         """Updates the camera pose visual
 
         Parameters
         ----------
-        C : np.ndarray
-            Camera orientation
-        r : np.ndarray
-            Camera position
+        attitude : np.ndarray
+            Camera orientation, represented as a 3x3 direction cosine matrix (DCM)   
+        position : np.ndarray
+            Camera position resolved in the inertial frame, represented as a 3x1 column matrix
         """
 
-        C = kwargs["orientation"]
-        r = kwargs["position"].reshape((-1, 1))
-
+        C = attitude
+        r = position.reshape((-1, 1))
+        
         # Clear the points and color list
         if self.clear_viz:
             self.marker.points.clear()
             self.marker.colors.clear()
 
         # Compute all required quantities
-        pt_lt = utils.numpy_to_point(C @ (self.scale * self.imlt) + r)
-        pt_lb = utils.numpy_to_point(C @ (self.scale * self.imlb) + r)
-        pt_rt = utils.numpy_to_point(C @ (self.scale * self.imrt) + r)
-        pt_rb = utils.numpy_to_point(C @ (self.scale * self.imrb) + r)
+        pt_lt = numpy_to_point(C @ (self.scale * self.imlt) + r)
+        pt_lb = numpy_to_point(C @ (self.scale * self.imlb) + r)
+        pt_rt = numpy_to_point(C @ (self.scale * self.imrt) + r)
+        pt_rb = numpy_to_point(C @ (self.scale * self.imrb) + r)
 
-        pt_lt0 = utils.numpy_to_point(C @ (self.scale * self.lt0) + r)
-        pt_lt1 = utils.numpy_to_point(C @ (self.scale * self.lt1) + r)
-        pt_lt2 = utils.numpy_to_point(C @ (self.scale * self.lt2) + r)
-        pt_oc = utils.numpy_to_point(C @ (self.scale * self.oc) + r)
+        pt_lt0 = numpy_to_point(C @ (self.scale * self.lt0) + r)
+        pt_lt1 = numpy_to_point(C @ (self.scale * self.lt1) + r)
+        pt_lt2 = numpy_to_point(C @ (self.scale * self.lt2) + r)
+        pt_oc = numpy_to_point(C @ (self.scale * self.oc) + r)
 
         # Image boundaries
         self.marker.points.append(pt_lt)
@@ -565,6 +576,9 @@ class CameraViz:
 
         self.pub.publish(self.marker)
 
+        if self.enable_path_viz:
+            self.path_viz.update(attitude=attitude, position=position)
+
 
 class PointCloudViz:
     def __init__(self, pub_name: str = "point_cloud"):
@@ -573,7 +587,7 @@ class PointCloudViz:
         self.point_cloud = PointCloud()
         self.point_cloud.header.frame_id = "world"
 
-    def update(self, positions:typing.List[np.ndarray]):
+    def update(self, positions: typing.List[np.ndarray]):
         """Updates the point cloud.
 
         Parameters
@@ -594,7 +608,9 @@ class PointCloudViz:
 
 
 class PointCloudVelocityViz:
-    def __init__(self, point_topic: str = "point_cloud", arrow_topic: str = "velocity_arrows"):
+    def __init__(
+        self, point_topic: str = "point_cloud", arrow_topic: str = "velocity_arrows"
+    ):
         self.point_pub = rospy.Publisher(point_topic, PointCloud, queue_size=50)
         self.arrow_pub = rospy.Publisher(arrow_topic, MarkerArray, queue_size=10)
 
@@ -604,9 +620,9 @@ class PointCloudVelocityViz:
         self.point_cloud = PointCloud()
         self.point_cloud.header.frame_id = self.frame_id
 
-    def update(self,
-               positions: typing.List[np.ndarray],
-               velocities: typing.List[np.ndarray]):
+    def update(
+        self, positions: typing.List[np.ndarray], velocities: typing.List[np.ndarray]
+    ):
         """
         Updates the point cloud and velocity arrow markers.
 
@@ -623,7 +639,9 @@ class PointCloudVelocityViz:
         if not isinstance(velocities, list):
             velocities = [velocities]
 
-        assert len(positions) == len(velocities), "positions and velocities must be the same length"
+        assert len(positions) == len(
+            velocities
+        ), "positions and velocities must be the same length"
 
         # Update point cloud
         self.point_cloud.points.clear()
@@ -646,7 +664,9 @@ class PointCloudVelocityViz:
             arrow_marker.id = i
             arrow_marker.type = Marker.ARROW
             arrow_marker.action = Marker.ADD
-            arrow_marker.scale = Vector3(0.05, 0.2, 0.2)  # shaft diameter, head diameter, head length
+            arrow_marker.scale = Vector3(
+                0.05, 0.2, 0.2
+            )  # shaft diameter, head diameter, head length
 
             arrow_marker.color.r = 0.5
             arrow_marker.color.g = 0
@@ -655,12 +675,13 @@ class PointCloudVelocityViz:
 
             arrow_marker.points = [
                 Point(start[0], start[1], start[2]),
-                Point(end[0], end[1], end[2])
+                Point(end[0], end[1], end[2]),
             ]
 
             marker_array.markers.append(arrow_marker)
 
         self.arrow_pub.publish(marker_array)
+
 
 class LineViz:
     def __init__(
