@@ -27,7 +27,7 @@ class OdometryViz:
         tf_pub_name: str = "/tf",
         queue_size: int = 50,
         frame_id="world",
-        child_frame_id: str = "map",
+        child_frame_id: str = "odom",
         enable_path_viz: bool = False,
         max_poses_in_path: int = None,
         path_viz_pub_name: str = "path_viz",
@@ -80,9 +80,9 @@ class OdometryViz:
 
         # Publish the transform
         transform = TransformStamped()
-        transform.header.frame_id = "world"
+        transform.header.frame_id = self.frame_id
         transform.header.stamp = rospy.Time.now()
-        transform.child_frame_id = "base_link"
+        transform.child_frame_id = self.child_frame_id
         transform.transform.translation.x = position[0]
         transform.transform.translation.y = position[1]
         transform.transform.translation.z = position[2]
